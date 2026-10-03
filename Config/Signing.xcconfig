@@ -1,0 +1,7 @@
+// Signing for running on a real iPhone. The simulator needs nothing here.
+// To install on your phone: copy Signing.local.xcconfig.example to Signing.local.xcconfig
+// (git ignores it) and set your Apple team ID and a bundle ID of your own.
+PRODUCT_BUNDLE_IDENTIFIER = com.example.RosterLab
+DEVELOPMENT_TEAM =
+
+#include? "Signing.local.xcconfig"
