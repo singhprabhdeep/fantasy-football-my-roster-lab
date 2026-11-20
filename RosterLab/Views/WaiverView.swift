@@ -2,16 +2,29 @@ import SwiftUI
 import RosterLabKit
 
 enum PositionFilter: String, CaseIterable, Identifiable {
-    case all = "All", qb = "QB", rb = "RB", wr = "WR", te = "TE", k = "K", def = "DEF"
+    case all = "All", qb = "QB", rb = "RB", wr = "WR", flex = "Flex", te = "TE", k = "K", def = "DEF"
 
     var id: String { rawValue }
 
-    func matches(_ position: String) -> Bool { self == .all || rawValue == position }
+    func matches(_ position: String) -> Bool {
+        switch self {
+        case .all: return true
+        case .flex: return WaiverCandidate.flexPositions.contains(position)
+        default: return rawValue == position
+        }
+    }
 }
 
 /// Opens the side-by-side comparison for one waiver player.
 struct CompareRoute: Hashable {
     let playerId: String
+    /// Compare with all my RBs and WRs (opened from the Flex tile) instead of the pickup's position.
+    var flex = false
+}
+
+extension WaiverCandidate {
+    /// "RBs", or "RBs and WRs" under Flex.
+    var comparedGroup: String { isFlex ? "RBs and WRs" : "\(player.position)s" }
 }
 
 struct WaiverView: View {
@@ -52,23 +65,27 @@ struct WaiverView: View {
                 if let dash = model.dashboard, showingUpcoming {
                     UpcomingWeekSection(dashboard: dash, candidates: dash.waivers.filter { !trendingOnly || $0.trending })
                 } else if let dash = model.dashboard {
-                    let shown = ranked(dash.waivers.filter { filter.matches($0.player.position) && passesToggles($0) })
+                    let shown = ranked(dash.waivers
+                        .filter { filter.matches($0.player.position) && passesToggles($0) }
+                        .map { filter == .flex ? $0.asFlex() : $0 })
                     Section {
                         if shown.isEmpty {
                             Text(starterOutOnly
                                  ? "No available backups whose starter is out\(filter == .all ? "" : " at \(filter.rawValue)") right now. Only RB, WR and TE have these."
                                  : filter == .all
                                  ? "No available players to show right now."
+                                 : filter == .flex
+                                 ? "No available RBs or WRs to show right now."
                                  : "No available \(filter.rawValue)s to show right now.")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(shown) { candidate in
-                            NavigationLink(value: CompareRoute(playerId: candidate.player.id)) {
+                            NavigationLink(value: CompareRoute(playerId: candidate.player.id, flex: candidate.isFlex)) {
                                 WaiverCard(candidate: candidate)
                             }
                         }
                     } footer: {
-                        Text("Sleeper's most-added players in the last 24 hours that nobody in your league has (Sleeper shares at most 100), topped up to about 150 with the best available players who aren't trending, marked Not trending: RB/WR/TE by touches + targets over the last 2 games, QB/K/DEF by average over the last 2 games. Ranked by \(rankBy.rawValue) (\(orderLabel)). Players with no value for that stat go last. Every number uses each player's \(model.waiverWindowLabel). Each card shows your lowest-scoring player at the same position (by average points, bench included); tap a card to compare with any of your players there and see every stat. Usage (touches + targets, snap share) comes first: in a 2025 backtest it was the best early sign of a pickup about to produce, while hot scoring streaks on 1–3 games tended to cool off.")
+                        Text("Sleeper's most-added players in the last 24 hours that nobody in your league has (Sleeper shares at most 100), topped up to about 150 with the best available players who aren't trending, marked Not trending: RB/WR/TE by touches + targets over the last 2 games, QB/K/DEF by average over the last 2 games. Ranked by \(rankBy.rawValue) (\(orderLabel)). Players with no value for that stat go last. Every number uses each player's \(model.waiverWindowLabel). Each card shows your lowest-scoring player at the same position (by average points, bench included); under Flex it's your lowest-scoring RB or WR. Tap a card to compare with any of your players there and see every stat. Usage (touches + targets, snap share) comes first: in a 2025 backtest it was the best early sign of a pickup about to produce, while hot scoring streaks on 1–3 games tended to cool off.")
                     }
                 }
             }
@@ -138,7 +155,7 @@ struct WaiverView: View {
             }
             .navigationDestination(for: CompareRoute.self) { route in
                 if let candidate = model.dashboard?.waivers.first(where: { $0.player.id == route.playerId }) {
-                    CompareView(candidate: candidate)
+                    CompareView(candidate: route.flex ? candidate.asFlex() : candidate)
                 }
             }
             .navigationDestination(for: String.self) { id in
@@ -203,6 +220,7 @@ struct WaiverCard: View {
     private var usesUsage: Bool { !player.isKickerOrDefense }
 
     /// My lowest-scoring player at the position (starters and bench), judged on the same game window.
+    /// Under Flex, my lowest-scoring RB or WR.
     private var mine: PlayerReport? {
         RosterLabService.lowestScoring(candidate.myPlayers, metrics: model.waiverMetrics)
     }
@@ -306,7 +324,7 @@ struct WaiverCard: View {
             }
 
             if candidate.myPlayers.count > 1 {
-                Label("Compare with your \(candidate.myPlayers.count) \(player.position)s", systemImage: "rectangle.split.3x1")
+                Label("Compare with your \(candidate.myPlayers.count) \(candidate.comparedGroup)", systemImage: "rectangle.split.3x1")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.accentColor)
             }
@@ -602,7 +620,7 @@ enum WaiverRank: String, CaseIterable, Identifiable {
     /// - All: every player stat; players without a value go last.
     static func options(for filter: PositionFilter) -> [WaiverRank] {
         switch filter {
-        case .rb, .wr, .te, .all: return [.touches, .mean, .ram, .snaps, .sortino]
+        case .rb, .wr, .flex, .te, .all: return [.touches, .mean, .ram, .snaps, .sortino]
         case .qb: return [.mean, .ram, .snaps, .sortino]
         case .k: return [.mean, .ram, .sortino]
         case .def: return [.mean, .ram, .sortino, .pointsAllowed, .sacks, .interceptions, .touchdowns, .fumbleRecoveries]

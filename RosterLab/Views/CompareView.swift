@@ -52,7 +52,7 @@ struct CompareView: View {
             }
             Section {
                 if candidate.myPlayers.isEmpty {
-                    Text("You don't have a \(pickup.position) on your roster.").foregroundStyle(.secondary)
+                    Text(candidate.isFlex ? "You don't have an RB or WR on your roster." : "You don't have a \(pickup.position) on your roster.").foregroundStyle(.secondary)
                 }
                 ForEach(myPlayers) { mine in
                     Button { toggle(mine.id) } label: {
@@ -73,7 +73,7 @@ struct CompareView: View {
                     .buttonStyle(.plain)
                 }
             } header: {
-                Text("Compare with your \(pickup.position)s")
+                Text("Compare with your \(candidate.comparedGroup)")
             } footer: {
                 if candidate.myPlayers.count > 1 {
                     HStack {

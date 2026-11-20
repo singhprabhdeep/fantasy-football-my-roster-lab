@@ -150,6 +150,27 @@ final class ServiceHelperTests: XCTestCase {
         XCTAssertNil(RosterLabService.lowestScoring([]))
     }
 
+    func testFlexComparesWithLowestRBOrWR() {
+        func player(_ id: String, _ pos: String, _ pts: [Double]) -> PlayerReport {
+            let weeks = pts.enumerated().map { WeekResult(week: $0.offset + 1, points: $0.element, target: 10) }
+            return PlayerReport(id: id, name: id, position: pos, team: nil, currentSeason: "2026",
+                                seasons: [MetricsCalculator.season("2026", weeks: weeks, k: 1)!])
+        }
+        let myRB = player("myRB", "RB", [9, 11])
+        let myWR = player("myWR", "WR", [4, 6])
+        let rbPickup = WaiverCandidate(player: player("pickup", "RB", [12, 12]), adds: 1, comparison: myRB,
+                                       myPlayers: [myRB], flexPlayers: [myRB, myWR])
+        let flex = rbPickup.asFlex()
+        XCTAssertTrue(flex.isFlex)
+        XCTAssertEqual(flex.comparison?.id, "myWR", "an RB pickup under Flex is compared with my lowest RB or WR")
+        XCTAssertEqual(flex.myPlayers.map(\.id), ["myRB", "myWR"])
+        XCTAssertFalse(rbPickup.isFlex)
+
+        let tePickup = WaiverCandidate(player: player("te", "TE", [5, 5]), adds: 1, comparison: nil,
+                                       myPlayers: [], flexPlayers: [myRB, myWR])
+        XCTAssertFalse(tePickup.asFlex().isFlex, "only RBs and WRs join Flex")
+    }
+
     func testWaiversRankedBySortino() {
         func candidate(_ id: String, _ pts: [Double]) -> WaiverCandidate {
             let weeks = pts.enumerated().map { WeekResult(week: $0.offset + 1, points: $0.element, target: 10) }

@@ -100,6 +100,23 @@ public struct WaiverCandidate: Sendable, Identifiable {
     public let myPlayers: [PlayerReport]
     /// False for players added to fill the list past Sleeper's 100 trending adds.
     public var trending: Bool = true
+    /// Every RB and WR on my roster, starters first: who a pickup is compared with under Flex.
+    public var flexPlayers: [PlayerReport] = []
+    /// True when `myPlayers` holds my RBs and WRs together (the Flex view) rather than one position.
+    public var isFlex = false
+
+    /// Positions the Flex view combines.
+    public static let flexPositions: Set<String> = ["RB", "WR"]
+
+    /// This pickup compared with all my RBs and WRs instead of only his own position.
+    /// Players at other positions come back unchanged.
+    public func asFlex() -> WaiverCandidate {
+        guard Self.flexPositions.contains(player.position) else { return self }
+        var flex = WaiverCandidate(player: player, adds: adds, comparison: RosterLabService.lowestScoring(flexPlayers),
+                                   myPlayers: flexPlayers, trending: trending, flexPlayers: flexPlayers)
+        flex.isFlex = true
+        return flex
+    }
 }
 
 /// A starting lineup added up: the starters' season averages next to the sum of their
@@ -343,7 +360,8 @@ public actor RosterLabService {
         func candidate(_ player: PlayerReport, adds: Int, trending: Bool) -> WaiverCandidate {
             let mine = mineAll.filter { $0.position == player.position }
             return WaiverCandidate(player: player, adds: adds, comparison: Self.lowestScoring(mine),
-                                   myPlayers: mine, trending: trending)
+                                   myPlayers: mine, trending: trending,
+                                   flexPlayers: mineAll.filter { WaiverCandidate.flexPositions.contains($0.position) })
         }
         var waiverList: [WaiverCandidate] = trending.compactMap { trend in
             guard !rostered.contains(trend.playerId),
